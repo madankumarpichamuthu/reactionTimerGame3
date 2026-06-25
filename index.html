@@ -1,0 +1,333 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Reaction Timer Game</title>
+  <style>
+    :root {
+      font-family: Arial, sans-serif;
+      background: #0d1117;
+      color: #c9d1d9;
+      min-height: 100vh;
+      margin: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+    }
+
+    .app {
+      width: min(100%, 720px);
+      background: #161b22;
+      border: 1px solid #30363d;
+      border-radius: 18px;
+      padding: 28px;
+      box-shadow: 0 24px 60px rgba(0, 0, 0, 0.35);
+    }
+
+    h1 {
+      margin: 0 0 12px;
+      font-size: clamp(2rem, 3vw, 3rem);
+      letter-spacing: -0.04em;
+      color: #58a6ff;
+    }
+
+    p {
+      margin: 0 0 24px;
+      line-height: 1.65;
+      color: #8b949e;
+    }
+
+    .status {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(120px, 1fr));
+      gap: 14px;
+      margin-bottom: 24px;
+    }
+
+    .card {
+      background: #0f1720;
+      border: 1px solid #21262d;
+      border-radius: 14px;
+      padding: 18px 16px;
+      text-align: center;
+    }
+
+    .card strong {
+      display: block;
+      font-size: 1.25rem;
+      margin-bottom: 6px;
+      color: #f0f6fc;
+    }
+
+    .card span {
+      font-size: 0.95rem;
+      color: #8b949e;
+    }
+
+    .controls {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      flex-wrap: wrap;
+      margin-bottom: 24px;
+    }
+
+    .controls button {
+      border: none;
+      border-radius: 999px;
+      font-size: 1rem;
+      padding: 12px 22px;
+      cursor: pointer;
+      transition: transform 120ms ease, background-color 120ms ease;
+      background: #238636;
+      color: #f0f6fc;
+    }
+
+    .controls button:hover {
+      transform: translateY(-1px);
+      background: #2ea043;
+    }
+
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(5, minmax(0, 1fr));
+      gap: 12px;
+    }
+
+    .light {
+      aspect-ratio: 1 / 1;
+      border-radius: 16px;
+      background: #161b22;
+      border: 2px solid #30363d;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      transition: transform 100ms ease, background-color 120ms ease, border-color 120ms ease;
+      position: relative;
+    }
+
+    .light::after {
+      content: '';
+      width: 16px;
+      height: 16px;
+      border-radius: 50%;
+      background: #484f58;
+      transition: background-color 120ms ease, box-shadow 120ms ease;
+    }
+
+    .light.on {
+      background: radial-gradient(circle at center, #8bff9c 20%, #238636 60%);
+      border-color: #2ea043;
+    }
+
+    .light.on::after {
+      background: #ffffff;
+      box-shadow: 0 0 24px rgba(56, 183, 113, 0.55);
+    }
+
+    .light:active {
+      transform: scale(0.98);
+    }
+
+    .message {
+      margin-top: 24px;
+      padding: 16px 18px;
+      border-radius: 14px;
+      background: #010409;
+      border: 1px solid #21262d;
+      color: #adbac7;
+    }
+
+    .message strong {
+      display: block;
+      margin-bottom: 8px;
+      color: #f0f6fc;
+    }
+  </style>
+</head>
+<body>
+  <main class="app">
+    <h1>Reaction Timer Game</h1>
+    <p>Click the light as soon as it turns on. There are 10 rounds total. Your final score is the total reaction time it takes to turn off all 10 lights.</p>
+
+    <div class="status">
+      <div class="card">
+        <strong id="roundDisplay">Round 0 / 10</strong>
+        <span>Round</span>
+      </div>
+      <div class="card">
+        <strong id="timerDisplay">0.00 s</strong>
+        <span>Current reaction</span>
+      </div>
+      <div class="card">
+        <strong id="scoreDisplay">0.00 s</strong>
+        <span>Total score</span>
+      </div>
+    </div>
+
+    <div class="controls">
+      <button id="startButton" type="button">Start Game</button>
+      <button id="resetButton" type="button" disabled>Reset</button>
+    </div>
+
+    <div class="grid" id="lightGrid" aria-label="Reaction lights"></div>
+
+    <div class="message" id="messageBox">
+      <strong>Ready to play?</strong>
+      <span>Press Start and wait for a light to turn on.</span>
+    </div>
+  </main>
+
+  <script>
+    const totalRounds = 10;
+    const grid = document.getElementById('lightGrid');
+    const roundDisplay = document.getElementById('roundDisplay');
+    const timerDisplay = document.getElementById('timerDisplay');
+    const scoreDisplay = document.getElementById('scoreDisplay');
+    const messageBox = document.getElementById('messageBox');
+    const startButton = document.getElementById('startButton');
+    const resetButton = document.getElementById('resetButton');
+
+    let activeIndex = null;
+    let round = 0;
+    let totalTime = 0;
+    let roundStart = 0;
+    let running = false;
+    let nextTimeout = null;
+
+    function createLights() {
+      grid.innerHTML = '';
+      for (let i = 0; i < totalRounds; i += 1) {
+        const light = document.createElement('div');
+        light.className = 'light off';
+        light.dataset.index = i;
+        light.setAttribute('role', 'button');
+        light.setAttribute('tabindex', '0');
+        light.setAttribute('aria-label', `Light ${i + 1} off`);
+        light.addEventListener('click', handleLightClick);
+        light.addEventListener('keydown', (event) => {
+          if (event.key === 'Enter' || event.key === ' ') {
+            event.preventDefault();
+            light.click();
+          }
+        });
+        grid.appendChild(light);
+      }
+    }
+
+    function updateStatus() {
+      roundDisplay.textContent = `Round ${round} / ${totalRounds}`;
+      timerDisplay.textContent = `${(roundStart ? 0 : 0).toFixed(2)} s`;
+      scoreDisplay.textContent = `${totalTime.toFixed(2)} s`;
+    }
+
+    function setMessage(title, description) {
+      messageBox.innerHTML = `<strong>${title}</strong><span>${description}</span>`;
+    }
+
+    function turnOnRandomLight() {
+      const lights = Array.from(grid.children);
+      const offLights = lights.filter((light) => light.dataset.active !== 'true');
+      if (offLights.length === 0) {
+        return;
+      }
+
+      const index = Math.floor(Math.random() * offLights.length);
+      const chosen = offLights[index];
+      activeIndex = chosen.dataset.index;
+      chosen.dataset.active = 'true';
+      chosen.classList.add('on');
+      chosen.setAttribute('aria-label', `Light ${Number(activeIndex) + 1} on. Click to turn off.`);
+      roundStart = performance.now();
+      setMessage('Light is on!', 'Click the glowing square as quickly as possible.');
+    }
+
+    function activateNextRound() {
+      if (round >= totalRounds) {
+        finishGame();
+        return;
+      }
+
+      const delay = Math.random() * 800 + 300;
+      nextTimeout = setTimeout(() => {
+        round += 1;
+        updateStatus();
+        turnOnRandomLight();
+      }, delay);
+    }
+
+    function handleLightClick(event) {
+      if (!running || activeIndex === null) {
+        return;
+      }
+
+      const clicked = event.currentTarget;
+      if (clicked.dataset.active !== 'true') {
+        return;
+      }
+
+      const reactionTime = performance.now() - roundStart;
+      totalTime += reactionTime / 1000;
+      clicked.dataset.active = 'false';
+      clicked.classList.remove('on');
+      clicked.setAttribute('aria-label', `Light ${Number(activeIndex) + 1} off`);
+      setMessage('Nice!', `Reaction time: ${reactionTime.toFixed(0)} ms. Preparing next light...`);
+      activeIndex = null;
+      roundStart = 0;
+      scoreDisplay.textContent = `${totalTime.toFixed(2)} s`;
+      timerDisplay.textContent = '0.00 s';
+
+      activateNextRound();
+    }
+
+    function startGame() {
+      if (running) {
+        return;
+      }
+      running = true;
+      round = 0;
+      totalTime = 0;
+      activeIndex = null;
+      roundStart = 0;
+      updateStatus();
+      setMessage('Game started!', 'Wait for a light to turn on, then click it immediately.');
+      startButton.disabled = true;
+      resetButton.disabled = false;
+      activateNextRound();
+    }
+
+    function finishGame() {
+      running = false;
+      startButton.disabled = false;
+      resetButton.disabled = false;
+      setMessage('Game finished!', `You completed 10 lights in ${totalTime.toFixed(2)} seconds.`);
+      clearTimeout(nextTimeout);
+      activeIndex = null;
+    }
+
+    function resetGame() {
+      clearTimeout(nextTimeout);
+      running = false;
+      round = 0;
+      totalTime = 0;
+      activeIndex = null;
+      roundStart = 0;
+      createLights();
+      updateStatus();
+      setMessage('Ready to play?', 'Press Start and wait for a light to turn on.');
+      startButton.disabled = false;
+      resetButton.disabled = true;
+    }
+
+    startButton.addEventListener('click', startGame);
+    resetButton.addEventListener('click', resetGame);
+
+    createLights();
+    updateStatus();
+    setMessage('Ready to play?', 'Press Start and wait for a light to turn on.');
+  </script>
+</body>
+</html>
